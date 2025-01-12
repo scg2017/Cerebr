@@ -7,9 +7,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     const settingsButton = document.getElementById('settings-button');
     const settingsMenu = document.getElementById('settings-menu');
     const feedbackButton = document.getElementById('feedback-button');
+    const fullscreenToggle = document.getElementById('fullscreen-toggle');
     let currentMessageElement = null;
     let currentController = null;  // 用于存储当前的 AbortController
+    let isFullscreen = false;
 
+    // 添加全屏切换功能
+    fullscreenToggle.addEventListener('click', async () => {
+        isFullscreen = !isFullscreen;
+        // 直接向父窗口发送消息
+        window.parent.postMessage({
+            type: 'TOGGLE_FULLSCREEN',
+            isFullscreen: isFullscreen
+        }, '*');
+        settingsMenu.classList.remove('visible');
+    });
+
+    // 提取公共配置
+    const MATH_DELIMITERS = {
+        regex: /(\\\\\([^]+?\\\\\))|(\\\([^]+?\\\))|(\\\[[\s\S]+?\\\])/g,
+        // regex: /(\$\$[\s\S]+?\$\$)|(\$[^\s$][^$]*?\$)|(\\\\\([^]+?\\\\\))|(\\\([^]+?\\\))|(\\\[[\s\S]+?\\\])/g,
+        renderConfig: {
+            delimiters: [
+                {left: '\\(', right: '\\)', display: false},  // 行内公式
+                {left: '\\\\(', right: '\\\\)', display: false},  // 行内公式
+                {left: '\\[', right: '\\]', display: true},   // 行间公式
+                // {left: '$$', right: '$$', display: true},     // 行间公式（备用）
+                // {left: '$', right: '$', display: false}       // 行内公式（备用）
+            ],
+            throwOnError: false
+        }
+    };
     // 添加反馈按钮点击事件
     feedbackButton.addEventListener('click', () => {
         const newIssueUrl = 'https://github.com/yym68686/Cerebr/issues/new';
@@ -443,21 +471,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 提取公共配置
-    const MATH_DELIMITERS = {
-        regex: /(\\\\\([^]+?\\\\\))|(\\\([^]+?\\\))|(\\\[[\s\S]+?\\\])/g,
-        // regex: /(\$\$[\s\S]+?\$\$)|(\$[^\s$][^$]*?\$)|(\\\\\([^]+?\\\\\))|(\\\([^]+?\\\))|(\\\[[\s\S]+?\\\])/g,
-        renderConfig: {
-            delimiters: [
-                {left: '\\(', right: '\\)', display: false},  // 行内公式
-                {left: '\\\\(', right: '\\\\)', display: false},  // 行内公式
-                {left: '\\[', right: '\\]', display: true},   // 行间公式
-                // {left: '$$', right: '$$', display: true},     // 行间公式（备用）
-                // {left: '$', right: '$', display: false}       // 行内公式（备用）
-            ],
-            throwOnError: false
-        }
-    };
 
     // 提取公共的数学公式处理函数
     function processMathAndMarkdown(text) {
