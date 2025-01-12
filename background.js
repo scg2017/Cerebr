@@ -33,7 +33,17 @@ async function handleTabCommand(commandType) {
       return;
     }
 
-    // 检查标签页是否已连接
+    // 检查是否是全屏模式（通过URL判断）
+    const isFullscreen = tab.url.includes('sidebar.html') && (tab.url.includes('fullscreen=true') || tab.url.includes('_blank'));
+
+    // 如果是全屏模式，使用runtime.sendMessage
+    if (isFullscreen) {
+      console.log('全屏模式，使用runtime.sendMessage发送命令');
+      chrome.runtime.sendMessage({ type: commandType });
+      return;
+    }
+
+    // 非全屏模式下检查标签页连接状态
     const isConnected = await isTabConnected(tab.id);
     if (!isConnected) {
       console.log('标签页未连接，等待重试...');

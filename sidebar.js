@@ -1,4 +1,20 @@
 document.addEventListener('DOMContentLoaded', async () => {
+    // 提取公共配置
+    const MATH_DELIMITERS = {
+        regex: /(\\\\\([^]+?\\\\\))|(\\\([^]+?\\\))|(\\\[[\s\S]+?\\\])/g,
+        // regex: /(\$\$[\s\S]+?\$\$)|(\$[^\s$][^$]*?\$)|(\\\\\([^]+?\\\\\))|(\\\([^]+?\\\))|(\\\[[\s\S]+?\\\])/g,
+        renderConfig: {
+            delimiters: [
+                {left: '\\(', right: '\\)', display: false},  // 行内公式
+                {left: '\\\\(', right: '\\\\)', display: false},  // 行内公式
+                {left: '\\[', right: '\\]', display: true},   // 行间公式
+                // {left: '$$', right: '$$', display: true},     // 行间公式（备用）
+                // {left: '$', right: '$', display: false}       // 行内公式（备用）
+            ],
+            throwOnError: false
+        }
+    };
+
     const chatContainer = document.getElementById('chat-container');
     const messageInput = document.getElementById('message-input');
     const contextMenu = document.getElementById('context-menu');
@@ -7,8 +23,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     const settingsButton = document.getElementById('settings-button');
     const settingsMenu = document.getElementById('settings-menu');
     const feedbackButton = document.getElementById('feedback-button');
+    const fullscreenButton = document.getElementById('fullscreen-button');
     let currentMessageElement = null;
     let currentController = null;  // 用于存储当前的 AbortController
+
+    // 添加chrome.runtime.onMessage监听器
+    if (chrome.runtime) {
+        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            console.log('收到runtime消息:', message.type);
+            if (message.type === 'CLEAR_CHAT') {
+                const clearChatButton = document.getElementById('clear-chat');
+                if (clearChatButton) {
+                    clearChatButton.click();
+                }
+            }
+            sendResponse({ success: true });
+            return true;
+        });
+    }
+
+    // 检查是否是全屏模式（通过URL参数或其他方式）
+    const isFullscreen = window.location.href.includes('fullscreen=true') || window.opener !== null;
+    if (isFullscreen) {
+        const webpageQA = document.getElementById('webpage-qa');
+        if (webpageQA) {
+            webpageQA.style.display = 'none';
+        }
+        fullscreenButton.style.display = 'none';
+    }
+
+    // 添加全屏按钮点击事件
+    fullscreenButton.addEventListener('click', () => {
+        const currentUrl = window.location.href;
+        const fullscreenUrl = currentUrl.includes('?') ?
+            currentUrl + '&fullscreen=true' :
+            currentUrl + '?fullscreen=true';
+        window.open(fullscreenUrl, '_blank');
+        settingsMenu.classList.remove('visible');
+
+        // 隐藏网页问答按钮
+        const webpageQA = document.getElementById('webpage-qa');
+        if (webpageQA) {
+            webpageQA.style.display = 'none';
+        }
+    });
 
     // 添加反馈按钮点击事件
     feedbackButton.addEventListener('click', () => {
@@ -143,15 +201,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 监听标签页切换
-    chrome.tabs.onActivated.addListener(async (activeInfo) => {
-        console.log('标签页切换:', activeInfo);
-        await loadChatHistory();
-        await loadWebpageSwitch('标签页切');
-    });
+    if (typeof chrome !== 'undefined' && chrome.tabs && !isFullscreen) {
+        chrome.tabs.onActivated.addListener(async (activeInfo) => {
+            console.log('标签页切换:', activeInfo);
+            await loadChatHistory();
+            await loadWebpageSwitch('标签页切换');
+        });
+    }
 
     // 初始加载历史记录
     await loadChatHistory();
 
+    // 如果不是全屏模式，加载网页问答状态
+    if (!isFullscreen) {
+        await loadWebpageSwitch();
+    }
 
     // 网答功能
     const webpageSwitch = document.getElementById('webpage-switch');
@@ -443,21 +507,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // 提取公共配置
-    const MATH_DELIMITERS = {
-        regex: /(\\\\\([^]+?\\\\\))|(\\\([^]+?\\\))|(\\\[[\s\S]+?\\\])/g,
-        // regex: /(\$\$[\s\S]+?\$\$)|(\$[^\s$][^$]*?\$)|(\\\\\([^]+?\\\\\))|(\\\([^]+?\\\))|(\\\[[\s\S]+?\\\])/g,
-        renderConfig: {
-            delimiters: [
-                {left: '\\(', right: '\\)', display: false},  // 行内公式
-                {left: '\\\\(', right: '\\\\)', display: false},  // 行内公式
-                {left: '\\[', right: '\\]', display: true},   // 行间公式
-                // {left: '$$', right: '$$', display: true},     // 行间公式（备用）
-                // {left: '$', right: '$', display: false}       // 行内公式（备用）
-            ],
-            throwOnError: false
-        }
-    };
 
     // 提取公共的数学公式处理函数
     function processMathAndMarkdown(text) {
@@ -498,6 +547,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         text = text.replace(/:\s\*\*/g, ':**');
         text = text.replace(/\*\*(.+?)\*\*[^\S\n]+/g, '@@$1@@#');
         text = text.replace(/\*\*(?=.*[^\S\n].*\*\*)([^*]+?)\*\*(?!\s)/g, '**$1** ');
+        text = text.replace(/\*\*(?=.*：.*\*\*)([^*]+?)\*\*(?!\s)/g, '**$1** ');
         text = text.replace(/\@\@(.+?)\@\@#/g, '**$1** ');
 
         // 渲染 Markdown
