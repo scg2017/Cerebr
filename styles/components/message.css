@@ -103,10 +103,6 @@
     text-decoration: none;
 }
 
-.message a:hover {
-    text-decoration: underline;
-}
-
 .message blockquote {
     margin: 0.5em 0;
     padding-left: 12px;
@@ -114,9 +110,16 @@
     color: var(--cerebr-blockquote-text-color);
 }
 
-.message:hover {
-    transform: translateY(-1px) translateZ(0);
-    box-shadow: 0 4px 12px var(--cerebr-message-hover-shadow);
+/* 仅在支持 hover 的设备上启用悬停效果，避免 iOS Safari “粘住 hover” 导致交互异常 */
+@media (hover: hover) and (pointer: fine) {
+    .message a:hover {
+        text-decoration: underline;
+    }
+
+    .message:hover {
+        transform: translateY(-1px) translateZ(0);
+        box-shadow: 0 4px 12px var(--cerebr-message-hover-shadow);
+    }
 }
 
 /* 批量加载时的消息样式 */

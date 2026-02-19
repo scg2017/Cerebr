@@ -3,6 +3,37 @@ const isExtensionProtocol = () => {
     return protocol === 'chrome-extension:' || protocol === 'moz-extension:';
 };
 
+let appHeightRafId = 0;
+
+const updateAppHeight = () => {
+    appHeightRafId = 0;
+    const visual = window.visualViewport;
+    const height = visual?.height || window.innerHeight || 0;
+    if (!height) return;
+    document.documentElement.style.setProperty('--app-height', `${Math.round(height)}px`);
+};
+
+const scheduleAppHeightUpdate = () => {
+    if (appHeightRafId) return;
+    appHeightRafId = requestAnimationFrame(updateAppHeight);
+};
+
+const initAppHeight = () => {
+    scheduleAppHeightUpdate();
+
+    window.addEventListener('resize', scheduleAppHeightUpdate, { passive: true });
+    window.addEventListener('orientationchange', scheduleAppHeightUpdate, { passive: true });
+    window.addEventListener('pageshow', scheduleAppHeightUpdate, { passive: true });
+
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', scheduleAppHeightUpdate);
+        window.visualViewport.addEventListener('scroll', scheduleAppHeightUpdate);
+    }
+
+    document.addEventListener('focusin', scheduleAppHeightUpdate, true);
+    document.addEventListener('focusout', scheduleAppHeightUpdate, true);
+};
+
 const toSafePathSegment = (value) => {
     const raw = String(value || '').trim();
     if (!raw) return null;
@@ -62,6 +93,8 @@ const fetchManifestVersion = async () => {
 };
 
 const boot = async () => {
+    initAppHeight();
+
     // Extension pages keep using the unversioned module graph.
     if (isExtensionProtocol()) {
         await tryImport('./main.js');
