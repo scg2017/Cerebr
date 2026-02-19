@@ -27,6 +27,8 @@ target_dir="v/${version}"
 mkdir -p "${target_dir}"
 rm -rf "${target_dir}/src"
 cp -R "src" "${target_dir}/"
+rm -rf "${target_dir}/styles"
+cp -R "styles" "${target_dir}/"
 
 # Fix cross-root import paths for the versioned copy (src -> v/<version>/src)
 msg_handler="${target_dir}/src/handlers/message-handler.js"
@@ -34,5 +36,15 @@ if [[ -f "${msg_handler}" ]]; then
   perl -pi -e "s#'\\.\\./\\.\\./htmd/latex\\.js'#'\\.\\./\\.\\./\\.\\./\\.\\./htmd/latex.js'#g" "${msg_handler}"
 fi
 
-echo "[gen] OK: generated ${target_dir}/src (from src/)"
+# Fix cross-root imports for the versioned styles copy (styles -> v/<version>/styles)
+styles_main="${target_dir}/styles/main.css"
+if [[ -f "${styles_main}" ]]; then
+  perl -pi -e "s#@import '\\.\\./htmd/#@import '\\.\\./\\.\\./htmd/#g" "${styles_main}"
+fi
 
+styles_code="${target_dir}/styles/components/code.css"
+if [[ -f "${styles_code}" ]]; then
+  perl -pi -e "s#@import '\\.\\./\\.\\./htmd/#@import '\\.\\./\\.\\./\\.\\./\\.\\./htmd/#g" "${styles_code}"
+fi
+
+echo "[gen] OK: generated ${target_dir}/src + ${target_dir}/styles (from src/ + styles/)"

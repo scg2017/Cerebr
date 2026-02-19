@@ -8,7 +8,6 @@ import { showImagePreview, hideImagePreview, showToast } from './utils/ui.js';
 import { renderAPICards, createCardCallbacks, selectCard } from './components/api-card.js';
 import { storageAdapter, syncStorageAdapter, browserAdapter, isExtensionEnvironment } from './utils/storage-adapter.js';
 import { initMessageInput, getFormattedMessageContent, buildMessageContent, clearMessageInput, handleWindowMessage, moveCaretToEnd, setPlaceholder } from './components/message-input.js';
-import './utils/viewport.js';
 import {
     hideChatList,
     initChatListEvents,

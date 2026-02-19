@@ -9,6 +9,27 @@ const toSafePathSegment = (value) => {
     return /^[0-9A-Za-z._-]+$/.test(raw) ? raw : null;
 };
 
+const applyVersionedStylesheet = (version) => {
+    const safeVersion = toSafePathSegment(version);
+    if (!safeVersion) return;
+
+    const versionedHref = new URL(`../v/${safeVersion}/styles/main.css`, import.meta.url).toString();
+
+    const existingLink = document.querySelector?.(
+        'link[rel="stylesheet"][href$="styles/main.css"], link[rel="stylesheet"][href$="/styles/main.css"]'
+    );
+
+    if (existingLink) {
+        existingLink.href = versionedHref;
+        return;
+    }
+
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = versionedHref;
+    document.head?.appendChild(link);
+};
+
 const tryImport = async (specifier) => {
     try {
         await import(specifier);
@@ -50,6 +71,7 @@ const boot = async () => {
     // Web: try versioned module graph first to avoid Safari ESM cache sticking to old code.
     const version = await fetchManifestVersion();
     if (version) {
+        applyVersionedStylesheet(version);
         const ok = await tryImport(`../v/${version}/src/main.js`);
         if (ok) return;
     }
@@ -58,4 +80,3 @@ const boot = async () => {
 };
 
 boot();
-
