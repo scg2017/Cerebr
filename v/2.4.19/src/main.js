@@ -20,6 +20,7 @@ import { ensureChatElementVisible, syncChatBottomExtraPadding } from './utils/sc
 import { createReadingProgressManager } from './utils/reading-progress.js';
 import { applyI18n, initI18n, getLanguagePreference, setLanguagePreference, reloadI18n, t } from './utils/i18n.js';
 import { setWebpageSwitchesForChat } from './utils/webpage-switches.js';
+import './utils/viewport.js';
 
 // 存储用户的问题历史
 let userQuestions = [];

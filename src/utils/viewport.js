@@ -3,6 +3,13 @@ let originalLayoutViewportHeight = Math.max(window.innerHeight, document.documen
 
 let rafId = 0;
 
+const isTextInputLike = (el) => {
+    if (!el || el === document.body) return false;
+    if (el.isContentEditable) return true;
+    const tagName = el.tagName;
+    return tagName === 'INPUT' || tagName === 'TEXTAREA';
+};
+
 function getLayoutViewportHeight() {
     // iOS Safari 上 window.innerHeight 可能更接近 visual viewport，
     // clientHeight 更接近 layout viewport。取较大值更稳妥。
@@ -36,7 +43,7 @@ function setViewportVars() {
     const effectiveKeyboardPx = Math.max(layoutKeyboardPx, keyboardOverlayPx);
 
     const KEYBOARD_VISIBLE_MIN_PX = 80;
-    const isKeyboardVisible = effectiveKeyboardPx > KEYBOARD_VISIBLE_MIN_PX;
+    const isKeyboardVisible = isTextInputLike(document.activeElement) && effectiveKeyboardPx > KEYBOARD_VISIBLE_MIN_PX;
 
     if (isKeyboardVisible) {
         // --keyboard-height 用于聊天列表的底部 padding，保证内容不会被键盘遮挡
@@ -57,13 +64,6 @@ function setViewportVars() {
     // 更新原始布局视口高度（键盘收起/未弹出时才更新）
     originalLayoutViewportHeight = layoutHeight;
 }
-
-const isTextInputLike = (el) => {
-    if (!el || el === document.body) return false;
-    if (el.isContentEditable) return true;
-    const tagName = el.tagName;
-    return tagName === 'INPUT' || tagName === 'TEXTAREA';
-};
 
 const scheduleBurstUpdates = () => {
     // iOS 键盘动画期间，visualViewport 值会在一段时间内变化；
