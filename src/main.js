@@ -462,7 +462,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         contextMenu,
         hideContextMenu: hideContextMenu.bind(null, {
             contextMenu,
-            onMessageElementReset: () => { /* 清空引用 */ }
+            onMessageElementReset: () => { /* 清空引用 */ },
+            restoreFocus: false
         }),
         uiConfig,
         settingsMenu,

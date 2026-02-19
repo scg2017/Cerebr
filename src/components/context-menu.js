@@ -56,7 +56,7 @@ export function showContextMenu({
 }
 
 // 隐藏上下文菜单
-export function hideContextMenu({ contextMenu, onMessageElementReset }) {
+export function hideContextMenu({ contextMenu, onMessageElementReset, restoreFocus = true }) {
     contextMenu.classList.remove('visible');
     if (onMessageElementReset) {
         onMessageElementReset();
@@ -64,7 +64,7 @@ export function hideContextMenu({ contextMenu, onMessageElementReset }) {
 
     const returnFocusEl = contextMenu.__cerebrReturnFocusEl;
     contextMenu.__cerebrReturnFocusEl = null;
-    if (returnFocusEl?.isConnected) {
+    if (restoreFocus && returnFocusEl?.isConnected) {
         returnFocusEl.focus?.({ preventScroll: true });
     }
 }

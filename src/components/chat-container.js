@@ -540,41 +540,53 @@ export function initChatContainer({
 
     // 设置全局点击和触摸事件，用于隐藏上下文菜单
     function setupGlobalEvents() {
+        const dismissContextMenu = ({ restoreFocus = false } = {}) => {
+            if (!contextMenu.classList.contains('visible')) return;
+            hideContextMenu({
+                contextMenu,
+                onMessageElementReset: () => { currentMessageElement = null; },
+                restoreFocus
+            });
+        };
+
+        document.addEventListener('pointerdown', (e) => {
+            if (contextMenu.contains(e.target)) return;
+            dismissContextMenu({ restoreFocus: false });
+        }, { capture: true, passive: true });
+
         // 点击其他地方隐藏菜单
         document.addEventListener('click', (e) => {
             if (!contextMenu.contains(e.target)) {
-                hideContextMenu({
-                    contextMenu,
-                    onMessageElementReset: () => { currentMessageElement = null; }
-                });
+                dismissContextMenu({ restoreFocus: false });
             }
         });
 
         // 触摸其他地方隐藏菜单
         document.addEventListener('touchstart', (e) => {
             if (!contextMenu.contains(e.target)) {
-                hideContextMenu({
-                    contextMenu,
-                    onMessageElementReset: () => { currentMessageElement = null; }
-                });
+                dismissContextMenu({ restoreFocus: false });
             }
         });
 
+        document.addEventListener('wheel', () => {
+            dismissContextMenu({ restoreFocus: false });
+        }, { capture: true, passive: true });
+
         // 滚动时隐藏菜单
-        chatContainer.addEventListener('scroll', () => {
-            hideContextMenu({
-                contextMenu,
-                onMessageElementReset: () => { currentMessageElement = null; }
-            });
+        chatContainer.addEventListener('scroll', () => dismissContextMenu({ restoreFocus: false }), { passive: true });
+
+        document.addEventListener('selectionchange', () => {
+            if (!contextMenu.classList.contains('visible')) return;
+            const selection = document.getSelection();
+            if (!selection || selection.isCollapsed) return;
+            if (!chatContainer.contains(selection.anchorNode) || !chatContainer.contains(selection.focusNode)) return;
+            dismissContextMenu({ restoreFocus: false });
         });
 
         // 按下 Esc 键隐藏菜单
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                hideContextMenu({
-                    contextMenu,
-                    onMessageElementReset: () => { currentMessageElement = null; }
-                });
+                dismissContextMenu({ restoreFocus: true });
             }
         });
     }
