@@ -55,11 +55,8 @@ function getLayoutViewportHeight() {
 function getKeyboardOverlayPx(layoutHeight) {
     const visual = window.visualViewport;
     if (!visual) return 0;
-    // iOS Safari: keyboard overlay height is best approximated by the delta between
-    // layout viewport baseline and visual viewport height. `offsetTop` is ignored here
-    // because it can jitter across focus cycles and cause large, temporary spikes.
-    const visualHeight = visual.height || 0;
-    return Math.max(0, layoutHeight - visualHeight);
+    const visualBottom = (visual.height || 0) + (visual.offsetTop || 0);
+    return Math.max(0, layoutHeight - visualBottom);
 }
 
 function smoothKeyboardOffset(nextPx, baselinePx) {
@@ -71,14 +68,15 @@ function smoothKeyboardOffset(nextPx, baselinePx) {
     // Apply a conservative per-frame clamp to filter out these spikes.
     const MAX_UP_FAST_PX = 160;
     const MAX_UP_SLOW_PX = 48;
-    const MAX_DOWN_PX = 220;
     const maxUpPx = prev < 80 ? MAX_UP_FAST_PX : MAX_UP_SLOW_PX;
 
     let next = clampedNext;
     if (clampedNext > prev) {
         next = Math.min(clampedNext, prev + maxUpPx);
-    } else if (clampedNext < prev) {
-        next = Math.max(clampedNext, prev - MAX_DOWN_PX);
+    } else {
+        // Always allow the offset to decrease immediately to avoid getting "stuck high"
+        // on the next focus cycle.
+        next = clampedNext;
     }
 
     smoothedKeyboardOffsetPx = next;
@@ -125,7 +123,7 @@ function setViewportVars() {
     const vh = window.innerHeight * 0.01;
     document.documentElement.style.setProperty('--vh', `${vh}px`);
 
-    const keyboardOverlayPx = getKeyboardOverlayPx(originalLayoutViewportHeight || layoutHeight);
+    const keyboardOverlayPx = getKeyboardOverlayPx(layoutHeight);
     const layoutKeyboardPx = Math.max(0, originalLayoutViewportHeight - layoutHeight);
     const effectiveKeyboardPx = Math.max(layoutKeyboardPx, keyboardOverlayPx);
 
@@ -146,7 +144,7 @@ function setViewportVars() {
     syncMessageHoverSuppression();
 
     if (isKeyboardVisible) {
-        const keyboardOffsetPx = smoothKeyboardOffset(keyboardOverlayPx, originalLayoutViewportHeight || layoutHeight);
+        const keyboardOffsetPx = smoothKeyboardOffset(keyboardOverlayPx, layoutHeight);
         // iOS Safari: 用户反馈在某些状态下 custom property 已更新，但 body 的 padding-bottom 仍然保持 0，
         // 导致输入栏留在 layout viewport 底部被键盘遮挡。这里用内联样式强制兜底。
         try {
@@ -192,11 +190,20 @@ function setViewportVars() {
 setViewportVars();
 
 // 监听视口变化（包括输入法弹出/收起）
-window.addEventListener('resize', scheduleViewportUpdate);
+window.addEventListener('resize', () => {
+    scheduleViewportUpdate();
+    if (isProbablyIOS()) scheduleBurstFrames(800);
+});
 
 if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', scheduleViewportUpdate);
-    window.visualViewport.addEventListener('scroll', scheduleViewportUpdate);
+    window.visualViewport.addEventListener('resize', () => {
+        scheduleViewportUpdate();
+        if (isProbablyIOS()) scheduleBurstFrames(800);
+    });
+    window.visualViewport.addEventListener('scroll', () => {
+        scheduleViewportUpdate();
+        if (isProbablyIOS()) scheduleBurstFrames(800);
+    });
 }
 
 // iOS Safari: 尽量在 focus 之前就先抑制“粘住 hover”，避免 hover/transforms 影响键盘动画期间的布局更新
