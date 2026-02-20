@@ -339,41 +339,6 @@ export function initMessageInput(config) {
         }
     };
 
-    const isProbablyIOS = () => {
-        const ua = navigator.userAgent || '';
-        const platform = navigator.platform || '';
-        const maxTouchPoints = navigator.maxTouchPoints || 0;
-        return /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouchPoints > 1);
-    };
-
-    const shouldSuppressMessageHoverOnInputFocus = () => {
-        if (isProbablyIOS()) return true;
-        try {
-            if (window.matchMedia('(hover: none)').matches) return true;
-            if (window.matchMedia('(pointer: coarse)').matches) return true;
-        } catch {
-            // ignore
-        }
-        return false;
-    };
-
-    const setSuppressMessageHover = (enabled) => {
-        if (!document?.body) return;
-        document.body.classList.toggle('cerebr-suppress-message-hover', enabled);
-    };
-
-    const prepareForInputFocus = () => {
-        if (!shouldSuppressMessageHoverOnInputFocus()) return;
-        setSuppressMessageHover(true);
-        // 强制刷新样式，避免 iOS Safari 在同一帧里既处理“气泡 hover 动效”
-        // 又处理 visualViewport resize 时触发诡异的布局/合成 bug。
-        try {
-            void document.body.offsetHeight;
-        } catch {
-            // ignore
-        }
-    };
-
     let sendQueued = false;
     let suppressNextInput = false;
     let lastEnterKeydownAt = 0;
@@ -504,17 +469,6 @@ export function initMessageInput(config) {
 
     // 点击输入框时不触发全局点击逻辑（比如关闭菜单、失焦）
     messageInput.addEventListener('click', (e) => e.stopPropagation());
-
-    // iOS Safari：如果消息气泡处于“粘住的 hover/上浮”状态，
-    // 直接点输入框会触发键盘与合成层重绘的竞态，导致输入栏/阅读进度行为异常。
-    // 在输入框即将获得焦点前，先强制取消消息 hover 动效（仅触屏/ iOS 场景启用）。
-    messageInput.addEventListener('touchstart', prepareForInputFocus, { capture: true, passive: true });
-    messageInput.addEventListener('pointerdown', (e) => {
-        if (e?.pointerType && e.pointerType !== 'touch') return;
-        prepareForInputFocus();
-    }, { capture: true, passive: true });
-    messageInput.addEventListener('focus', () => setSuppressMessageHover(shouldSuppressMessageHoverOnInputFocus()));
-    messageInput.addEventListener('blur', () => setSuppressMessageHover(false));
 
     // 全局点击：在合适场景下收起输入法（移动端更友好）
     document.body.addEventListener('click', (e) => {

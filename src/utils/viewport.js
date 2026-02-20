@@ -10,6 +10,36 @@ const isTextInputLike = (el) => {
     return tagName === 'INPUT' || tagName === 'TEXTAREA';
 };
 
+const isProbablyIOS = () => {
+    const ua = navigator.userAgent || '';
+    const platform = navigator.platform || '';
+    const maxTouchPoints = navigator.maxTouchPoints || 0;
+    return /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouchPoints > 1);
+};
+
+const shouldSuppressMessageHover = () => {
+    if (!isProbablyIOS()) return false;
+    const active = document.activeElement;
+    return !!(active && active instanceof Element && active.id === 'message-input');
+};
+
+const setMessageHoverSuppressed = (enabled) => {
+    try {
+        if (!isProbablyIOS()) return;
+        document.body?.classList?.toggle('cerebr-suppress-message-hover', !!enabled);
+    } catch {
+        // ignore
+    }
+};
+
+const syncMessageHoverSuppression = () => {
+    try {
+        document.body?.classList?.toggle('cerebr-suppress-message-hover', shouldSuppressMessageHover());
+    } catch {
+        // ignore
+    }
+};
+
 function getLayoutViewportHeight() {
     // iOS Safari 上 window.innerHeight 可能更接近 visual viewport，
     // clientHeight 更接近 layout viewport。取较大值更稳妥。
@@ -44,6 +74,8 @@ function setViewportVars() {
 
     const KEYBOARD_VISIBLE_MIN_PX = 80;
     const isKeyboardVisible = isTextInputLike(document.activeElement) && effectiveKeyboardPx > KEYBOARD_VISIBLE_MIN_PX;
+    // 输入框聚焦时同步抑制消息的“粘住 hover”上浮（iOS Safari）
+    syncMessageHoverSuppression();
 
     // iOS Safari quirk: in some rendering states (e.g. a transformed/hover-stuck element),
     // CSS-based keyboard offset compensation may fail to apply. Use inline styles as a
@@ -89,6 +121,8 @@ function setViewportVars() {
     document.documentElement.style.setProperty('--keyboard-offset', '0px');
     document.documentElement.style.setProperty('--chat-top-margin', '0px');
     document.body.classList.remove('keyboard-visible');
+    // 键盘收起时也同步清理一次（避免 focus 状态异常导致 class 残留）
+    syncMessageHoverSuppression();
 
     // 更新原始布局视口高度（键盘收起/未弹出时才更新）
     originalLayoutViewportHeight = layoutHeight;
@@ -118,6 +152,10 @@ document.addEventListener(
     'focusin',
     (event) => {
         if (!isTextInputLike(event?.target)) return;
+        // 立即抑制消息 hover，上浮状态不应干扰键盘弹起期间的布局/合成。
+        if (event?.target instanceof Element && event.target.id === 'message-input') {
+            setMessageHoverSuppressed(true);
+        }
         scheduleBurstUpdates();
     },
     true
@@ -127,6 +165,9 @@ document.addEventListener(
     'focusout',
     (event) => {
         if (!isTextInputLike(event?.target)) return;
+        if (event?.target instanceof Element && event.target.id === 'message-input') {
+            setMessageHoverSuppressed(false);
+        }
         scheduleBurstUpdates();
     },
     true
