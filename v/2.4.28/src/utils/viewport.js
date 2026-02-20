@@ -1,5 +1,5 @@
 // 用于存储“布局视口”的原始高度（键盘未弹出时）
-let originalLayoutViewportHeight = Math.max(window.innerHeight, document.documentElement?.clientHeight || 0);
+let originalLayoutViewportHeight = getLayoutViewportHeight();
 
 let rafId = 0;
 let burstRafId = 0;
@@ -44,8 +44,10 @@ const syncMessageHoverSuppression = () => {
 };
 
 function getLayoutViewportHeight() {
-    // iOS Safari 上 window.innerHeight 可能更接近 visual viewport，
-    // clientHeight 更接近 layout viewport。取较大值更稳妥。
+    // 优先使用根元素的实际渲染高度（更贴近应用当前的“可见布局高度”）
+    // iOS Safari 键盘场景下，clientHeight/innerHeight 往往代表不同的 viewport 概念。
+    const rectH = document.documentElement?.getBoundingClientRect?.().height || 0;
+    if (rectH) return rectH;
     return Math.max(window.innerHeight, document.documentElement?.clientHeight || 0);
 }
 
@@ -117,11 +119,11 @@ function setViewportVars() {
     syncMessageHoverSuppression();
 
     if (isKeyboardVisible) {
+        const keyboardOffsetPx = Math.round(keyboardOverlayPx);
         // --keyboard-height 用于聊天列表的底部 padding，保证内容不会被键盘遮挡
         document.documentElement.style.setProperty('--keyboard-height', `${Math.round(effectiveKeyboardPx)}px`);
-        // --keyboard-offset 历史上用于“键盘覆盖但布局不缩小”时把输入栏上移。
-        // 当前布局采用 `--app-height` 驱动整页缩放，避免“只抬输入栏导致背景不跟随”的割裂感。
-        document.documentElement.style.setProperty('--keyboard-offset', '0px');
+        // --keyboard-offset：当布局没有随键盘缩高时，用于把整体内容“扣掉”键盘覆盖的底部区域（CSS 通过 body padding-bottom 实现）
+        document.documentElement.style.setProperty('--keyboard-offset', `${keyboardOffsetPx}px`);
         // 保持原有语义：只有在 layout viewport 真的变小时才补偿 top margin
         document.documentElement.style.setProperty('--chat-top-margin', `${Math.round(layoutKeyboardPx)}px`);
         document.body.classList.add('keyboard-visible');
