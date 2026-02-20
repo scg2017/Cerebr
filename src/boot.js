@@ -4,6 +4,15 @@ const isExtensionProtocol = () => {
 };
 
 let appHeightRafId = 0;
+let appHeightBurstRafId = 0;
+let appHeightBurstUntilMs = 0;
+
+const isTextInputLike = (el) => {
+    if (!el || el === document.body) return false;
+    if (el.isContentEditable) return true;
+    const tagName = el.tagName;
+    return tagName === 'INPUT' || tagName === 'TEXTAREA';
+};
 
 const updateAppHeight = () => {
     appHeightRafId = 0;
@@ -18,6 +27,22 @@ const scheduleAppHeightUpdate = () => {
     appHeightRafId = requestAnimationFrame(updateAppHeight);
 };
 
+const scheduleAppHeightBurst = (durationMs = 1800) => {
+    const now = performance.now();
+    appHeightBurstUntilMs = Math.max(appHeightBurstUntilMs, now + durationMs);
+    if (appHeightBurstRafId) return;
+
+    const tick = () => {
+        appHeightBurstRafId = 0;
+        updateAppHeight();
+        if (performance.now() < appHeightBurstUntilMs) {
+            appHeightBurstRafId = requestAnimationFrame(tick);
+        }
+    };
+
+    appHeightBurstRafId = requestAnimationFrame(tick);
+};
+
 const initAppHeight = () => {
     scheduleAppHeightUpdate();
 
@@ -30,8 +55,22 @@ const initAppHeight = () => {
         window.visualViewport.addEventListener('scroll', scheduleAppHeightUpdate);
     }
 
-    document.addEventListener('focusin', scheduleAppHeightUpdate, true);
-    document.addEventListener('focusout', scheduleAppHeightUpdate, true);
+    document.addEventListener(
+        'focusin',
+        (event) => {
+            scheduleAppHeightUpdate();
+            if (isTextInputLike(event?.target)) scheduleAppHeightBurst();
+        },
+        true
+    );
+    document.addEventListener(
+        'focusout',
+        (event) => {
+            scheduleAppHeightUpdate();
+            if (isTextInputLike(event?.target)) scheduleAppHeightBurst(600);
+        },
+        true
+    );
 };
 
 const toSafePathSegment = (value) => {

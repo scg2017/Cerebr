@@ -6,9 +6,6 @@ let burstRafId = 0;
 let burstUntilMs = 0;
 let keyboardVisibleUntilMs = 0;
 
-// iOS Safari：输入栏的“内联抬升”值（px）
-let inputInlineLiftPx = 0;
-
 const isTextInputLike = (el) => {
     if (!el || el === document.body) return false;
     if (el.isContentEditable) return true;
@@ -85,6 +82,15 @@ function scheduleBurstFrames(durationMs = 1800) {
 
 function setViewportVars() {
     const layoutHeight = getLayoutViewportHeight();
+    // 兜底：确保 `--app-height` 始终跟随 visual viewport（iOS Safari 键盘动画期间可能丢 resize 事件）
+    try {
+        const visualHeight = window.visualViewport?.height || window.innerHeight || 0;
+        if (visualHeight) {
+            document.documentElement.style.setProperty('--app-height', `${Math.round(visualHeight)}px`);
+        }
+    } catch {
+        // ignore
+    }
 
     // 获取实际视口高度（用于一些 100vh 的兼容场景；目前项目内不强依赖）
     const vh = window.innerHeight * 0.01;
@@ -110,52 +116,12 @@ function setViewportVars() {
     // 输入框聚焦时同步抑制消息的“粘住 hover”上浮（iOS Safari）
     syncMessageHoverSuppression();
 
-    // iOS Safari quirk: in some rendering states (e.g. a transformed/hover-stuck element),
-    // CSS-based keyboard offset compensation may fail to apply. Use inline styles as a
-    // last-resort, high-priority path for the input bar to ensure it stays above the keyboard.
-    try {
-        const inputContainer = document.getElementById('input-container');
-        const active = document.activeElement;
-        const activeWithinInput = !!(
-            inputContainer &&
-            active &&
-            active instanceof Element &&
-            inputContainer.contains(active)
-        );
-        const visualHeight = window.visualViewport?.height || window.innerHeight || 0;
-        const shouldPinInput = !!(inputContainer && visualHeight) && isKeyboardVisible && (activeWithinInput || inputInlineLiftPx > 0);
-
-        if (inputContainer) {
-            if (shouldPinInput) {
-                const rect = inputContainer.getBoundingClientRect();
-                // rect.bottom 基于当前视觉位置（包含 transform）。通过“误差反馈”把输入栏钉在 visual viewport 底部。
-                const errorPx = rect.bottom - visualHeight;
-                const desiredLiftPx = Math.max(0, Math.round(inputInlineLiftPx + errorPx));
-
-                inputContainer.style.marginBottom = '0px';
-                if (desiredLiftPx > 0) {
-                    inputContainer.style.transform = `translate3d(0, -${desiredLiftPx}px, 0)`;
-                } else {
-                    inputContainer.style.transform = '';
-                }
-                inputContainer.style.willChange = 'transform';
-                inputInlineLiftPx = desiredLiftPx;
-            } else {
-                inputContainer.style.transform = '';
-                inputContainer.style.marginBottom = '';
-                inputContainer.style.willChange = '';
-                inputInlineLiftPx = 0;
-            }
-        }
-    } catch {
-        // ignore
-    }
-
     if (isKeyboardVisible) {
         // --keyboard-height 用于聊天列表的底部 padding，保证内容不会被键盘遮挡
         document.documentElement.style.setProperty('--keyboard-height', `${Math.round(effectiveKeyboardPx)}px`);
-        // --keyboard-offset 只用于“键盘覆盖但布局不缩小”的情况，驱动输入栏上移
-        document.documentElement.style.setProperty('--keyboard-offset', `${Math.round(inputInlineLiftPx)}px`);
+        // --keyboard-offset 历史上用于“键盘覆盖但布局不缩小”时把输入栏上移。
+        // 当前布局采用 `--app-height` 驱动整页缩放，避免“只抬输入栏导致背景不跟随”的割裂感。
+        document.documentElement.style.setProperty('--keyboard-offset', '0px');
         // 保持原有语义：只有在 layout viewport 真的变小时才补偿 top margin
         document.documentElement.style.setProperty('--chat-top-margin', `${Math.round(layoutKeyboardPx)}px`);
         document.body.classList.add('keyboard-visible');
@@ -183,6 +149,27 @@ if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', scheduleViewportUpdate);
     window.visualViewport.addEventListener('scroll', scheduleViewportUpdate);
 }
+
+// iOS Safari: 尽量在 focus 之前就先抑制“粘住 hover”，避免 hover/transforms 影响键盘动画期间的布局更新
+const preFocusSuppression = (event) => {
+    if (!isProbablyIOS()) return;
+    const target = event?.target;
+    if (!(target instanceof Element)) return;
+    if (target.id !== 'message-input') return;
+    setMessageHoverSuppressed(true);
+    scheduleBurstFrames();
+};
+
+document.addEventListener('touchstart', preFocusSuppression, { capture: true, passive: true });
+document.addEventListener(
+    'pointerdown',
+    (event) => {
+        // pointer events 在 iOS Safari 可能同时触发；仅处理非鼠标输入以避免桌面端干扰
+        if (event?.pointerType === 'mouse') return;
+        preFocusSuppression(event);
+    },
+    { capture: true, passive: true }
+);
 
 // 监听输入框焦点事件（main.js 可能在 DOMContentLoaded 之后动态 import）
 document.addEventListener(
