@@ -45,6 +45,35 @@ function setViewportVars() {
     const KEYBOARD_VISIBLE_MIN_PX = 80;
     const isKeyboardVisible = isTextInputLike(document.activeElement) && effectiveKeyboardPx > KEYBOARD_VISIBLE_MIN_PX;
 
+    // iOS Safari quirk: in some rendering states (e.g. a transformed/hover-stuck element),
+    // CSS-based keyboard offset compensation may fail to apply. Use inline styles as a
+    // last-resort, high-priority path for the input bar to ensure it stays above the keyboard.
+    try {
+        const inputContainer = document.getElementById('input-container');
+        const active = document.activeElement;
+        const activeWithinInput = !!(
+            inputContainer &&
+            active &&
+            active instanceof Element &&
+            inputContainer.contains(active)
+        );
+        const shouldInlineLift = activeWithinInput && isKeyboardVisible && keyboardOverlayPx > 0;
+
+        if (inputContainer) {
+            if (shouldInlineLift) {
+                inputContainer.style.marginBottom = '0px';
+                inputContainer.style.transform = `translate3d(0, -${Math.round(keyboardOverlayPx)}px, 0)`;
+                inputContainer.style.willChange = 'transform';
+            } else {
+                inputContainer.style.transform = '';
+                inputContainer.style.marginBottom = '';
+                inputContainer.style.willChange = '';
+            }
+        }
+    } catch {
+        // ignore
+    }
+
     if (isKeyboardVisible) {
         // --keyboard-height 用于聊天列表的底部 padding，保证内容不会被键盘遮挡
         document.documentElement.style.setProperty('--keyboard-height', `${Math.round(effectiveKeyboardPx)}px`);
