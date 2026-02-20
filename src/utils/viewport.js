@@ -2,6 +2,12 @@
 let originalLayoutViewportHeight = Math.max(window.innerHeight, document.documentElement?.clientHeight || 0);
 
 let rafId = 0;
+let burstRafId = 0;
+let burstUntilMs = 0;
+let keyboardVisibleUntilMs = 0;
+
+// iOS Safari：输入栏的“内联抬升”值（px）
+let inputInlineLiftPx = 0;
 
 const isTextInputLike = (el) => {
     if (!el || el === document.body) return false;
@@ -61,6 +67,22 @@ function scheduleViewportUpdate() {
     });
 }
 
+function scheduleBurstFrames(durationMs = 1800) {
+    const now = performance.now();
+    burstUntilMs = Math.max(burstUntilMs, now + durationMs);
+    if (burstRafId) return;
+
+    const tick = () => {
+        burstRafId = 0;
+        scheduleViewportUpdate();
+        if (performance.now() < burstUntilMs) {
+            burstRafId = requestAnimationFrame(tick);
+        }
+    };
+
+    burstRafId = requestAnimationFrame(tick);
+}
+
 function setViewportVars() {
     const layoutHeight = getLayoutViewportHeight();
 
@@ -73,7 +95,18 @@ function setViewportVars() {
     const effectiveKeyboardPx = Math.max(layoutKeyboardPx, keyboardOverlayPx);
 
     const KEYBOARD_VISIBLE_MIN_PX = 80;
-    const isKeyboardVisible = isTextInputLike(document.activeElement) && effectiveKeyboardPx > KEYBOARD_VISIBLE_MIN_PX;
+    const now = performance.now();
+    const activeIsTextInput = isTextInputLike(document.activeElement);
+
+    if (activeIsTextInput && effectiveKeyboardPx > KEYBOARD_VISIBLE_MIN_PX) {
+        keyboardVisibleUntilMs = Math.max(keyboardVisibleUntilMs, now + 4000);
+    } else if (!activeIsTextInput && now >= keyboardVisibleUntilMs) {
+        keyboardVisibleUntilMs = 0;
+    }
+
+    const isKeyboardVisible =
+        effectiveKeyboardPx > KEYBOARD_VISIBLE_MIN_PX &&
+        (activeIsTextInput || now < keyboardVisibleUntilMs);
     // 输入框聚焦时同步抑制消息的“粘住 hover”上浮（iOS Safari）
     syncMessageHoverSuppression();
 
@@ -89,17 +122,29 @@ function setViewportVars() {
             active instanceof Element &&
             inputContainer.contains(active)
         );
-        const shouldInlineLift = activeWithinInput && isKeyboardVisible && keyboardOverlayPx > 0;
+        const visualHeight = window.visualViewport?.height || window.innerHeight || 0;
+        const shouldPinInput = !!(inputContainer && visualHeight) && isKeyboardVisible && (activeWithinInput || inputInlineLiftPx > 0);
 
         if (inputContainer) {
-            if (shouldInlineLift) {
+            if (shouldPinInput) {
+                const rect = inputContainer.getBoundingClientRect();
+                // rect.bottom 基于当前视觉位置（包含 transform）。通过“误差反馈”把输入栏钉在 visual viewport 底部。
+                const errorPx = rect.bottom - visualHeight;
+                const desiredLiftPx = Math.max(0, Math.round(inputInlineLiftPx + errorPx));
+
                 inputContainer.style.marginBottom = '0px';
-                inputContainer.style.transform = `translate3d(0, -${Math.round(keyboardOverlayPx)}px, 0)`;
+                if (desiredLiftPx > 0) {
+                    inputContainer.style.transform = `translate3d(0, -${desiredLiftPx}px, 0)`;
+                } else {
+                    inputContainer.style.transform = '';
+                }
                 inputContainer.style.willChange = 'transform';
+                inputInlineLiftPx = desiredLiftPx;
             } else {
                 inputContainer.style.transform = '';
                 inputContainer.style.marginBottom = '';
                 inputContainer.style.willChange = '';
+                inputInlineLiftPx = 0;
             }
         }
     } catch {
@@ -110,7 +155,7 @@ function setViewportVars() {
         // --keyboard-height 用于聊天列表的底部 padding，保证内容不会被键盘遮挡
         document.documentElement.style.setProperty('--keyboard-height', `${Math.round(effectiveKeyboardPx)}px`);
         // --keyboard-offset 只用于“键盘覆盖但布局不缩小”的情况，驱动输入栏上移
-        document.documentElement.style.setProperty('--keyboard-offset', `${Math.round(keyboardOverlayPx)}px`);
+        document.documentElement.style.setProperty('--keyboard-offset', `${Math.round(inputInlineLiftPx)}px`);
         // 保持原有语义：只有在 layout viewport 真的变小时才补偿 top margin
         document.documentElement.style.setProperty('--chat-top-margin', `${Math.round(layoutKeyboardPx)}px`);
         document.body.classList.add('keyboard-visible');
@@ -127,14 +172,6 @@ function setViewportVars() {
     // 更新原始布局视口高度（键盘收起/未弹出时才更新）
     originalLayoutViewportHeight = layoutHeight;
 }
-
-const scheduleBurstUpdates = () => {
-    // iOS 键盘动画期间，visualViewport 值会在一段时间内变化；
-    // 做一小段“脉冲更新”，比仅依赖 resize 更稳。
-    for (const delay of [0, 40, 80, 120, 180, 260, 360, 520, 720]) {
-        setTimeout(scheduleViewportUpdate, delay);
-    }
-};
 
 // 初始设置
 setViewportVars();
@@ -156,7 +193,7 @@ document.addEventListener(
         if (event?.target instanceof Element && event.target.id === 'message-input') {
             setMessageHoverSuppressed(true);
         }
-        scheduleBurstUpdates();
+        scheduleBurstFrames();
     },
     true
 );
@@ -168,7 +205,7 @@ document.addEventListener(
         if (event?.target instanceof Element && event.target.id === 'message-input') {
             setMessageHoverSuppressed(false);
         }
-        scheduleBurstUpdates();
+        scheduleBurstFrames();
     },
     true
 );
