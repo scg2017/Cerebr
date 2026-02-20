@@ -122,6 +122,17 @@
     }
 }
 
+/* iOS Safari 等触屏设备上 :hover 可能会“粘住”，并在键盘弹出/视口变化时触发渲染竞态。
+   输入框即将聚焦时临时抑制 hover 上浮，等价于“自动取消上浮”。 */
+body.cerebr-suppress-message-hover .message {
+    transition: none !important;
+}
+
+body.cerebr-suppress-message-hover .message:hover {
+    transform: translateY(0) scale(1) translateZ(0) !important;
+    box-shadow: 0 2px 6px var(--cerebr-message-shadow) !important;
+}
+
 /* 批量加载时的消息样式 */
 .message.batch-load {
     animation: none;
