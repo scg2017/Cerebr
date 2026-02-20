@@ -48,7 +48,7 @@
 #scroll-to-bottom {
     position: absolute;
     right: 16px;
-    bottom: calc(72px + env(safe-area-inset-bottom) + var(--chat-bottom-extra-padding, 0px) + var(--keyboard-offset, 0px));
+    bottom: calc(72px + env(safe-area-inset-bottom) + var(--chat-bottom-extra-padding, 0px));
     width: 44px;
     height: 44px;
     border-radius: 999px;

@@ -120,6 +120,18 @@ function setViewportVars() {
 
     if (isKeyboardVisible) {
         const keyboardOffsetPx = Math.round(keyboardOverlayPx);
+        // iOS Safari: 用户反馈在某些状态下 custom property 已更新，但 body 的 padding-bottom 仍然保持 0，
+        // 导致输入栏留在 layout viewport 底部被键盘遮挡。这里用内联样式强制兜底。
+        try {
+            if (keyboardOffsetPx > 0) {
+                document.body.style.setProperty('padding-bottom', `${keyboardOffsetPx}px`, 'important');
+            } else {
+                document.body.style.removeProperty('padding-bottom');
+            }
+            document.body.style.setProperty('box-sizing', 'border-box', 'important');
+        } catch {
+            // ignore
+        }
         // --keyboard-height 用于聊天列表的底部 padding，保证内容不会被键盘遮挡
         document.documentElement.style.setProperty('--keyboard-height', `${Math.round(effectiveKeyboardPx)}px`);
         // --keyboard-offset：当布局没有随键盘缩高时，用于把整体内容“扣掉”键盘覆盖的底部区域（CSS 通过 body padding-bottom 实现）
@@ -128,6 +140,13 @@ function setViewportVars() {
         document.documentElement.style.setProperty('--chat-top-margin', `${Math.round(layoutKeyboardPx)}px`);
         document.body.classList.add('keyboard-visible');
         return;
+    }
+
+    try {
+        document.body.style.removeProperty('padding-bottom');
+        document.body.style.removeProperty('box-sizing');
+    } catch {
+        // ignore
     }
 
     document.documentElement.style.setProperty('--keyboard-height', '0px');
