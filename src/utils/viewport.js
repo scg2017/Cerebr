@@ -27,6 +27,20 @@ const isProbablyIOS = () => {
     return /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouchPoints > 1);
 };
 
+// iOS Safari has a long-standing quirk where `:hover` can "stick" after a tap and
+// interact badly with keyboard/viewport animations. For the web build on iOS we
+// disable message hover-lift entirely to keep input/keyboard behavior stable.
+const disableMessageHoverOnIOS = () => {
+    try {
+        if (!isProbablyIOS()) return;
+        document.body?.classList?.add('cerebr-disable-message-hover');
+    } catch {
+        // ignore
+    }
+};
+
+disableMessageHoverOnIOS();
+
 const shouldSuppressMessageHover = () => {
     if (!isProbablyIOS()) return false;
     const active = document.activeElement;
