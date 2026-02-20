@@ -6,6 +6,12 @@ let burstRafId = 0;
 let burstUntilMs = 0;
 let keyboardVisibleUntilMs = 0;
 let smoothedKeyboardOffsetPx = 0;
+let lastLayoutHeightPx = getLayoutViewportHeight();
+let lastKeyboardVisible = false;
+let keyboardShowStartMs = 0;
+let stableKeyboardOverlayPx = 0;
+let stableCandidateOverlayPx = 0;
+let stableCandidateSinceMs = 0;
 
 const isTextInputLike = (el) => {
     if (!el || el === document.body) return false;
@@ -45,11 +51,10 @@ const syncMessageHoverSuppression = () => {
 };
 
 function getLayoutViewportHeight() {
-    // 优先使用根元素的实际渲染高度（更贴近应用当前的“可见布局高度”）
-    // iOS Safari 键盘场景下，clientHeight/innerHeight 往往代表不同的 viewport 概念。
-    const rectH = document.documentElement?.getBoundingClientRect?.().height || 0;
-    if (rectH) return rectH;
-    return Math.max(window.innerHeight, document.documentElement?.clientHeight || 0);
+    // Use the layout viewport height as the baseline. On iOS Safari the keyboard typically
+    // does NOT change `window.innerHeight`, so we use it as the stable "layout" height
+    // and compute the keyboard overlay via VisualViewport.
+    return Math.max(window.innerHeight || 0, document.documentElement?.clientHeight || 0);
 }
 
 function getKeyboardOverlayPx(layoutHeight) {
@@ -109,18 +114,17 @@ function scheduleBurstFrames(durationMs = 1800) {
 
 function setViewportVars() {
     const layoutHeight = getLayoutViewportHeight();
-    // 兜底：确保 `--app-height` 始终跟随 visual viewport（iOS Safari 键盘动画期间可能丢 resize 事件）
+    // Ensure `--app-height` stays in sync with the layout viewport height.
     try {
-        const visualHeight = window.visualViewport?.height || window.innerHeight || 0;
-        if (visualHeight) {
-            document.documentElement.style.setProperty('--app-height', `${Math.round(visualHeight)}px`);
+        if (layoutHeight) {
+            document.documentElement.style.setProperty('--app-height', `${Math.round(layoutHeight)}px`);
         }
     } catch {
         // ignore
     }
 
     // 获取实际视口高度（用于一些 100vh 的兼容场景；目前项目内不强依赖）
-    const vh = window.innerHeight * 0.01;
+    const vh = layoutHeight * 0.01;
     document.documentElement.style.setProperty('--vh', `${vh}px`);
 
     const keyboardOverlayPx = getKeyboardOverlayPx(layoutHeight);
@@ -143,8 +147,57 @@ function setViewportVars() {
     // 输入框聚焦时同步抑制消息的“粘住 hover”上浮（iOS Safari）
     syncMessageHoverSuppression();
 
+    // Track keyboard show/hide cycles and keep a "stable" overlay height to filter iOS spikes.
+    if (isKeyboardVisible && !lastKeyboardVisible) {
+        keyboardShowStartMs = now;
+        stableCandidateOverlayPx = Math.round(keyboardOverlayPx);
+        stableCandidateSinceMs = now;
+    }
+
+    if (!isKeyboardVisible) {
+        // When keyboard is hidden and layout viewport height changes (orientation/resize),
+        // reset the cached stable overlay height to avoid using stale baselines.
+        if (Math.abs(layoutHeight - lastLayoutHeightPx) > 120) {
+            stableKeyboardOverlayPx = 0;
+        }
+        lastLayoutHeightPx = layoutHeight;
+        stableCandidateSinceMs = 0;
+    }
+
+    lastKeyboardVisible = isKeyboardVisible;
+
     if (isKeyboardVisible) {
-        const keyboardOffsetPx = smoothKeyboardOffset(keyboardOverlayPx, layoutHeight);
+        const rawOverlayPx = Math.round(keyboardOverlayPx);
+
+        // iOS Safari can briefly report an overly small VisualViewport.height on subsequent
+        // focus cycles, making the overlay look much larger than the real keyboard.
+        // Clamp extreme early-cycle spikes to the last stable value to avoid "jump up then fall".
+        let overlayForOffsetPx = rawOverlayPx;
+        const SPIKE_WINDOW_MS = 900;
+        const SPIKE_EXTRA_PX = 120;
+        if (
+            stableKeyboardOverlayPx > 0 &&
+            now - keyboardShowStartMs < SPIKE_WINDOW_MS &&
+            rawOverlayPx > stableKeyboardOverlayPx + SPIKE_EXTRA_PX
+        ) {
+            overlayForOffsetPx = stableKeyboardOverlayPx;
+        }
+
+        // Update stable overlay height once the keyboard animation settles.
+        // Use the spike-filtered value to avoid poisoning the baseline on iOS.
+        const STABLE_EPS_PX = 2;
+        const STABLE_MIN_MS = 140;
+        if (Math.abs(overlayForOffsetPx - stableCandidateOverlayPx) <= STABLE_EPS_PX) {
+            if (!stableCandidateSinceMs) stableCandidateSinceMs = now;
+            if (now - stableCandidateSinceMs >= STABLE_MIN_MS) {
+                stableKeyboardOverlayPx = overlayForOffsetPx;
+            }
+        } else {
+            stableCandidateOverlayPx = overlayForOffsetPx;
+            stableCandidateSinceMs = now;
+        }
+
+        const keyboardOffsetPx = smoothKeyboardOffset(overlayForOffsetPx, layoutHeight);
         // iOS Safari: 用户反馈在某些状态下 custom property 已更新，但 body 的 padding-bottom 仍然保持 0，
         // 导致输入栏留在 layout viewport 底部被键盘遮挡。这里用内联样式强制兜底。
         try {

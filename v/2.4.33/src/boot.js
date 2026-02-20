@@ -16,8 +16,10 @@ const isTextInputLike = (el) => {
 
 const updateAppHeight = () => {
     appHeightRafId = 0;
-    const visual = window.visualViewport;
-    const height = visual?.height || window.innerHeight || 0;
+    // Keep --app-height tied to the *layout* viewport height. On iOS Safari the keyboard
+    // only shrinks the visual viewport (not window.innerHeight), and keyboard compensation
+    // is handled separately via `utils/viewport.js` to avoid double-offset / bouncing.
+    const height = window.innerHeight || document.documentElement?.clientHeight || 0;
     if (!height) return;
     document.documentElement.style.setProperty('--app-height', `${Math.round(height)}px`);
 };
