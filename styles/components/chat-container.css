@@ -15,16 +15,10 @@
     position: relative;
     height: 100%;
     box-sizing: border-box;
-    margin-top: var(--chat-top-margin, 0px);
-    transition: margin-top 0.3s ease;
 }
 
 #chat-container::-webkit-scrollbar {
     display: none;
-}
-
-.keyboard-visible #chat-container {
-    padding-bottom: calc(60px + env(safe-area-inset-bottom) + var(--keyboard-height, 0px) + var(--chat-bottom-extra-padding, 0px));
 }
 
 .chat-switch-placeholder {
@@ -74,10 +68,6 @@
     pointer-events: none;
     transition: opacity 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
     z-index: 150;
-}
-
-.keyboard-visible #scroll-to-bottom {
-    bottom: calc(72px + env(safe-area-inset-bottom) + var(--keyboard-height, 0px) + var(--chat-bottom-extra-padding, 0px));
 }
 
 #scroll-to-bottom.visible {

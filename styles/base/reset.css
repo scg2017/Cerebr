@@ -3,7 +3,9 @@ body {
     margin: 0;
     padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
     height: 100vh;
+    height: 100dvh;
     height: -webkit-fill-available;
+    height: var(--vv-height, 100dvh);
     display: flex;
     flex-direction: column;
     background-color: var(--cerebr-bg-color);
@@ -13,10 +15,9 @@ body {
     backdrop-filter: blur(var(--cerebr-blur-radius));
     -webkit-backdrop-filter: blur(var(--cerebr-blur-radius));
     position: fixed;
-    top: 0;
+    top: var(--vv-offset-top, 0px);
     left: 0;
     right: 0;
-    bottom: 0;
 }
 
 :focus-visible {
