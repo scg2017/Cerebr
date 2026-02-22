@@ -227,6 +227,116 @@ function isInputEffectivelyEmpty(messageInput) {
     return !hasImages && !text;
 }
 
+function clampNumber(value, min, max) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return min;
+    if (n < min) return min;
+    if (n > max) return max;
+    return n;
+}
+
+function setupInputContainerTouchScrollProxy({ inputContainer, chatContainer, messageInput }) {
+    if (!inputContainer || !chatContainer) return;
+    if (inputContainer.__cerebrTouchScrollProxyAttached) return;
+    inputContainer.__cerebrTouchScrollProxyAttached = true;
+
+    const MOVE_THRESHOLD_PX = 6;
+
+    const state = {
+        active: false,
+        ignored: false,
+        intercepting: false,
+        target: 'chat',
+        startX: 0,
+        startY: 0,
+        lastY: 0,
+        messageInputWasScrollable: false
+    };
+
+    const getSingleTouch = (event) => {
+        if (!event?.touches || event.touches.length !== 1) return null;
+        return event.touches[0];
+    };
+
+    const scrollElementBy = (element, deltaY) => {
+        if (!element) return;
+        const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+        element.scrollTop = clampNumber(element.scrollTop + deltaY, 0, maxScrollTop);
+    };
+
+    const onTouchStart = (event) => {
+        const touch = getSingleTouch(event);
+        if (!touch) return;
+
+        state.active = true;
+        state.ignored = false;
+        state.intercepting = false;
+        state.target = 'chat';
+
+        state.startX = touch.clientX;
+        state.startY = touch.clientY;
+        state.lastY = touch.clientY;
+
+        const target = event.target;
+        const inMessageInput = !!(messageInput && (target === messageInput || messageInput.contains(target)));
+        state.messageInputWasScrollable = !!(
+            inMessageInput &&
+            messageInput &&
+            messageInput.scrollHeight > messageInput.clientHeight + 1
+        );
+    };
+
+    const onTouchMove = (event) => {
+        if (!state.active || state.ignored) return;
+        const touch = getSingleTouch(event);
+        if (!touch) return;
+
+        const totalDx = touch.clientX - state.startX;
+        const totalDy = touch.clientY - state.startY;
+
+        if (!state.intercepting) {
+            const absDx = Math.abs(totalDx);
+            const absDy = Math.abs(totalDy);
+
+            if (absDx < MOVE_THRESHOLD_PX && absDy < MOVE_THRESHOLD_PX) {
+                return;
+            }
+
+            if (absDy < absDx) {
+                state.ignored = true;
+                return;
+            }
+
+            state.intercepting = true;
+            state.target = state.messageInputWasScrollable ? 'input' : 'chat';
+            state.lastY = touch.clientY;
+        }
+
+        const deltaY = touch.clientY - state.lastY;
+        state.lastY = touch.clientY;
+
+        const scrollDelta = -deltaY;
+        if (state.target === 'input') {
+            scrollElementBy(messageInput, scrollDelta);
+        } else {
+            scrollElementBy(chatContainer, scrollDelta);
+        }
+
+        if (event.cancelable) event.preventDefault();
+    };
+
+    const endTouch = () => {
+        state.active = false;
+        state.ignored = false;
+        state.intercepting = false;
+    };
+
+    inputContainer.addEventListener('touchstart', onTouchStart, { passive: true });
+    inputContainer.addEventListener('touchmove', onTouchMove, { passive: false });
+    inputContainer.addEventListener('touchend', endTouch, { passive: true });
+    inputContainer.addEventListener('touchcancel', endTouch, { passive: true });
+}
+
 function insertPlainTextAtSelection(messageInput, text) {
     if (!messageInput) return;
     if (!text) return;
@@ -849,6 +959,10 @@ export function initMessageInput(config) {
     // 初始化时同步一次，避免输入栏高度变化导致底部消息被遮挡
     initAnimatedFakeCaret(messageInput);
     syncChatBottomExtraPadding();
+
+    const inputContainer = document.getElementById('input-container');
+    const chatContainer = document.getElementById('chat-container');
+    setupInputContainerTouchScrollProxy({ inputContainer, chatContainer, messageInput });
 }
 
 /**
